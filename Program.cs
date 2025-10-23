@@ -2,133 +2,139 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace MiniAPI
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            //TODO: lese alle CPUs aus Configuration-File
+            // TODO: lade CPUs aus Konfiguration
             TagCollection.AddCpu("A01", S7.Net.CpuType.S71500, "192.168.160.56", 0, 0);
 
+            // Hintergrundlese-Task starten (optional)
             TagCollection.StartReading();
 
-            var builder = WebApplication.CreateSlimBuilder(args);
-            //builder.Services.ConfigureHttpJsonOptions(options =>
-            //{
-            //    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
-            //});
-
-            var app = builder.Build();
-            app.UseWebSockets();
-            app.Map("/", async context =>
+            try
             {
-                if (context.WebSockets.IsWebSocketRequest)
+                var builder = WebApplication.CreateSlimBuilder(args);
+                var app = builder.Build();
+
+                app.UseWebSockets();
+
+                app.Map("/", async context =>
                 {
-                    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-                    var buffer = new byte[1024 * 4];
-
-                    #region Anfrage neue Tags                    
-                    var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), context.RequestAborted);
-                    string newTagsStr = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    Console.WriteLine($"Neue Tags: {newTagsStr}");
-
-                    Dictionary<string, object?> newTags = [];
-
-                    foreach (var tagName in JsonSerializer.Deserialize<string[]>(newTagsStr) ?? [])
-                        newTags.Add(tagName, null);
-
-                    if (newTags.Count < 1)
+                    if (!context.WebSockets.IsWebSocketRequest)
                     {
-                        await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Keine Tags übermittelt", context.RequestAborted);
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
                         return;
                     }
 
-                    
-                    TagCollection.AddTags([.. newTags.Keys]);
-                    #endregion
+                    using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+                    var ct = context.RequestAborted;
 
-                    #region Sende Tag-Werte
-
-                    while (!context.RequestAborted.IsCancellationRequested)
+                    try
                     {
-                        #region Tags lesen nur nur geänderte Werte senden
-                        List<JsonTag> tagsToSendJsdon = TagCollection.PokeTagValues(ref newTags);
-                        if (tagsToSendJsdon.Count < 1)
-                            continue;
-
-                        string answer = JsonSerializer.Serialize(tagsToSendJsdon.ToArray());
-                        //Console.WriteLine($"\r\nSende: {answer}");
-                        #endregion
-
-                            
-                        var bytes = Encoding.UTF8.GetBytes(answer);
-                        var arraySegment = new ArraySegment<byte>(bytes, 0, bytes.Length);
-
-                        if (webSocket.State == System.Net.WebSockets.WebSocketState.Open && newTags.Count > 0)
+                        // 1) Vollständige initiale Nachricht einlesen (kann fragmentiert kommen)
+                        var initialJson = await ReadFullMessageAsync(webSocket, ct);
+#if DEBUG
+                        Console.WriteLine($"Neue Tags (raw): {initialJson}");
+#endif
+                        var tagNames = JsonSerializer.Deserialize<string[]?>(initialJson) ?? Array.Empty<string>();
+                        if (tagNames.Length == 0)
                         {
-                            await webSocket.SendAsync(arraySegment, System.Net.WebSockets.WebSocketMessageType.Text, true, context.RequestAborted);
-                            await Task.Delay(1111);
+                            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Keine Tags übermittelt", ct);
+                            return;
+                        }
+
+                        // 2) Lokale Anfragemap aufbauen (per connection)
+                        var requested = tagNames
+                            .Where(n => !string.IsNullOrWhiteSpace(n))
+                            .Distinct()
+                            .ToDictionary(n => n, _ => (object?)null);
+
+                        // 3) Tags global registrieren
+                        TagCollection.AddTags(tagNames);
+
+                        // 4) Schleife: nur geänderte Werte senden
+                        var options = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
+                        while (!ct.IsCancellationRequested && webSocket.State == WebSocketState.Open)
+                        {
+                            var changed = TagCollection.PokeTagValues(ref requested);
+                            if (changed.Count > 0)
+                            {
+                                var payload = JsonSerializer.Serialize(changed.ToArray(), options);
+                                var bytes = Encoding.UTF8.GetBytes(payload);
+                                await webSocket.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
+#if DEBUG
+                               // Console.WriteLine($"Sende: {payload}");
+#endif
+                            }
+
+                            // moderate Poll-Rate; Abbruch über ct möglich
+                            await Task.Delay(1000, ct);
                         }
 
                     }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        // Client/Server schließt — still exit
+                    }
+                    catch (WebSocketException wsex)
+                    {
+                        Console.WriteLine($"WebSocket Fehler: {wsex.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Fehler in WebSocket-Handler: {ex.Message}");
+                    }
+                    finally
+                    {
+                        if (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived)
+                        {
+                            try
+                            {
+                                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
+                            }
+                            catch { }
+                        }
+                    }
+                });
 
-                     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, result.CloseStatusDescription, context.RequestAborted);
-                    //await webSocket.CloseAsync(WebSocketCloseStatus.Empty, "Keine Datenpunkte angefragt", context.RequestAborted);
-                    #endregion
-                }
-                else
-                {
-                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                }
-            });
-            app.Map("/test", async ctx =>
-            {
+                app.Map("/test", async ctx =>
                 {
                     ctx.Response.StatusCode = 200;
                     ctx.Response.ContentType = "text/html";
                     await ctx.Response.WriteAsync(HtmlTemplate.JSWebsocket);
                     await ctx.Response.CompleteAsync();
-                }
-            });
+                });
 
-            #region Beispiel für eine Mini-API mit Todo-Elementen
-            //var sampleTodos = new Todo[] {
-            //    new(1, "Walk the dog"),
-            //    new(2, "Do the dishes", DateOnly.FromDateTime(DateTime.Now)),
-            //    new(3, "Do the laundry", DateOnly.FromDateTime(DateTime.Now.AddDays(1))),
-            //    new(4, "Clean the bathroom"),
-            //    new(5, "Clean the car", DateOnly.FromDateTime(DateTime.Now.AddDays(2)))
-            //};
+                await app.RunAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Program Fehler: {ex.Message}");
+            }
+        }
 
-            //var todosApi = app.MapGroup("/todos");
-            //todosApi.MapGet("/", () => sampleTodos);
-            //todosApi.MapGet("/{id}", (int id) =>
-            //    sampleTodos.FirstOrDefault(a => a.Id == id) is { } todo
-            //        ? Results.Ok(todo)
-            //        : Results.NotFound());
-            #endregion
+        private static async Task<string> ReadFullMessageAsync(WebSocket ws, CancellationToken ct)
+        {
+            var buffer = new byte[4096];
+            using var ms = new MemoryStream();
+            WebSocketReceiveResult? result;
 
-            app.Run();
+            do
+            {
+                result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    break;
+                ms.Write(buffer, 0, result.Count);
+            } while (!result.EndOfMessage);
+
+            ms.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(ms, Encoding.UTF8);
+            return await reader.ReadToEndAsync();
         }
     }
-
-    //public record Todo(int Id, string? Title, DateOnly? DueBy = null, bool IsComplete = false);
-
-    //[JsonSerializable(typeof(Todo[]))]
-    //internal partial class AppJsonSerializerContext(JsonSerializerOptions? options) : JsonSerializerContext(options)
-    //{
-    //    public static IJsonTypeInfoResolver? Default { get; internal set; }
-
-    //    protected override JsonSerializerOptions? GeneratedSerializerOptions => throw new NotImplementedException();
-
-    //    public override JsonTypeInfo? GetTypeInfo(Type type)
-    //    {
-    //        throw new NotImplementedException();
-    //    }
-    //}
-
-
 }

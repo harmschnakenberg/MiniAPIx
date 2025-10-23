@@ -1,46 +1,54 @@
 ﻿using Microsoft.AspNetCore.Mvc.Infrastructure;
 using S7.Net;
 using S7.Net.Types;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MiniAPI
 {
     public static class TagCollection
     {
         private static bool _IsReadingTags;
-
+       
+#if DEBUG
+        public const int TagExpirationSeconds = 30;
+#else
+        public const int TagExpirationSeconds = 90;
+#endif
 
         #region SPS
-        private static readonly Dictionary<string, Plc> Plcs = [];
+        private static readonly Dictionary<string, Plc> Plcs = new();
+
 
         public static void AddCpu(string name, CpuType cpuType, string ip, short rack, short slot)
         {
-            Plcs.Add(name, new Plc(cpuType, ip, rack, slot));
+            Plcs[name] = new Plc(cpuType, ip, rack, slot);
         }
         #endregion
 
         #region Tag-CRUD
-        public static LinkedList<Tag> Tags { get; private set; } = new LinkedList<Tag>();
+        // Threadsichere, schnelle Lookups nach Name
+        public static ConcurrentDictionary<string, Tag> Tags { get; } = new();
+
+        private static readonly object _startStopLock = new();
+        private static CancellationTokenSource? _readCts;
+        private static Task? _readingTask;
 
         public static void AddTag(string tagName)
         {
-            if (Tags.Where(x => x.Name == tagName).FirstOrDefault() != null)
-            {
-                Tags.Where(x => x.Name == tagName).FirstOrDefault()?.RefreshExpiration();
-                Console.WriteLine($"Tag bereits vorhanden, Ablaufzeit aktualisiert: {tagName}");
-            }
-            else
-            {
-                Tag tag = new(tagName);
-                Tags.AddLast(tag);
-            }
-
-
+            var tag = Tags.GetOrAdd(tagName, n => new Tag(n));
+            tag.RefreshExpiration();
+#if DEBUG
+            Console.WriteLine($"Tag hinzugefügt/aktualisiert: {tagName}");
+#endif
         }
 
         public static void AddTags(string[]? tagNames)
@@ -56,25 +64,12 @@ namespace MiniAPI
 
         private static void RemoveExpiredTags()
         {
-            // Iterator initialisieren
-            var knoten = Tags.First;
-
-            // While-Schleife für die Iteration
-            while (knoten != null)
+            var now = System.DateTime.Now;
+            var expired = Tags.Where(kv => kv.Value.IsExpired(now)).Select(kv => kv.Key).ToList();
+            foreach (var key in expired)
             {
-                // Nächsten Knoten speichern, bevor wir ihn möglicherweise ändern
-                var nextNode = knoten.Next;
-
-                // Aktionen auf dem aktuellen Knoten ausführen
-                if (knoten.Value.IsExpired())
-                {
-                    Console.WriteLine("entferne " + knoten.Value.Name);
-                    // Element entfernen
-                    Tags.Remove(knoten);
-                }
-
-                // Zum nächsten Knoten wechseln
-                knoten = nextNode;
+                if (Tags.TryRemove(key, out _))
+                    Console.WriteLine("entferne " + key);
             }
         }
         #endregion
@@ -85,10 +80,12 @@ namespace MiniAPI
         /// </summary>
         public static void StartReading()
         {
-            if (!_IsReadingTags)
-            {
+            lock (_startStopLock)
+            {                
+                if (_IsReadingTags) return;
                 _IsReadingTags = true;
-                ReadTagsAsync();
+                _readCts = new CancellationTokenSource();
+                _readingTask = Task.Run(() => ReadLoopAsync(_readCts.Token));
             }
         }
 
@@ -97,190 +94,257 @@ namespace MiniAPI
         /// </summary>
         public static void StopReading()
         {
-            _IsReadingTags = false;
+            lock (_startStopLock)
+            {
+                if (!_IsReadingTags) return;
+                _IsReadingTags = false;
+                _readCts?.Cancel();
+            }
         }
 
         public static List<JsonTag> PokeTagValues(ref Dictionary<string, object?> request)
         {
-            List<JsonTag> jsonTags = [];
-        
-            foreach (var name in request.Keys)
+            var jsonTags = new List<JsonTag>();
+            var keys = request.Keys.ToList();
+
+            foreach (var name in keys)
             {
-                //Console.WriteLine($"Tag {name}");
-                double newVal = Convert.ToDouble(Tags.FirstOrDefault(x => x.Name == name)?.Value);              
-                double oldVal = Convert.ToDouble(request[name]);
-                double diff = Math.Abs(newVal - oldVal);
+                if (!Tags.TryGetValue(name, out var tag))
+                    continue;
+
+                if (!TagCollectionHelpers.TryConvertToDouble(tag.Value, out var newVal))
+                    continue;
+
+                if (!TagCollectionHelpers.TryConvertToDouble(request[name], out var oldVal))
+                {
+                    jsonTags.Add(new JsonTag(name, newVal));
+                    request[name] = newVal;
+                    continue;
+                }
+
+                var diff = Math.Abs(newVal - oldVal);
                 if (diff > 0.09)
                 {
-                    //Console.WriteLine($"Tag {name}: alt={oldVal}, neu={newVal}, diff={diff}");
                     jsonTags.Add(new JsonTag(name, newVal));
                 }
                 request[name] = newVal;
-                
             }
 #if DEBUG
-            Console.WriteLine(string.Join(' ', jsonTags));
+            if(jsonTags.Count > 0)
+                Console.WriteLine(string.Join(' ', jsonTags.Select(j => $"{j.N}:{j.V}")));
 #endif
             return jsonTags;
         }
 
-        public static JsonTag[] GetTagValues(Dictionary<string, object?> source)
-        {
-            List<JsonTag> tagAnswer = [];
-            foreach (var s in source)
-            {
-                if (s.Value != null)
-                    tagAnswer.Add(new JsonTag(s.Key, s.Value));
-            }
-            return [.. tagAnswer];
-        }
-
         /// <summary>
-        /// Liest alle Tags in einer Schleife, entfernt anschließend abgelaufene Tags und startet erneut
+        /// Hintergrundloop: regelmäßiges Lesen und periodisches Entfernen abgelaufener Tags
         /// </summary>
-        /// <returns></returns>
-        private static async void ReadTagsAsync()
-        {
-            for (int i = 0; i < 90; i++)
-            {
-                // Console.Write("; " + i);
-                await ReadAllTagsOnceAsync();
-                await Task.Delay(1000);
-            }
-
-            RemoveExpiredTags();
-            Console.WriteLine($"Es werden {Tags.Count} Tags überwacht.");
-
-            if (_IsReadingTags)
-                ReadTagsAsync();
-            else
-                foreach (var plc in Plcs.Values)
-                    plc.Close();
-        }
-
-        private static async Task ReadAllTagsOnceAsync()
+        private static async Task ReadLoopAsync(CancellationToken ct)
         {
             try
             {
-                foreach (var plcName in Plcs.Keys)
+                Console.WriteLine($"Tag-Lifetime: {TagExpirationSeconds} sec");
+                int seconds = 0;
+                // Verwende PeriodicTimer für stabilere Ticks und geringere Overhead
+                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+                while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
                 {
-                    if (!Plcs[plcName].IsConnected)
+                    await ReadAllTagsOnceAsync(ct);
+
+                    seconds++;
+                    if (seconds >= TagExpirationSeconds)
                     {
-                        await Plcs[plcName].OpenAsync();
+                        RemoveExpiredTags();
+                        seconds = 0;
+                        Console.WriteLine($"Es werden {Tags.Count} Tags überwacht.");
                     }
+                }
+            }
+            catch (OperationCanceledException) {
+                /* erwartet beim Stop */
+                Console.WriteLine($"Lesen aus SPS beenedet.");
+            }
+            finally
+            {
+                foreach (var plc in Plcs.Values)
+                {
+                    try { plc.Close(); } catch { }
+                }
+                _IsReadingTags = false;
+            }
+        }
 
-                    #region Prepare Tags for PLC
-                    List<DataItem> tags = [.. Tags
-                                            .Where(x => x.PlcName == plcName)
-                                            .Select(y => y.Item)];
-                    #endregion
-                    #region Read batches of 20
-                    int index = 0;
-                    int end = tags.Count;
+        private static async Task ReadAllTagsOnceAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                // Kopiere die PLC-Namen um Änderungen an Plcs während der Iteration zu vermeiden
+                var plcNames = Plcs.Keys.ToList();
 
-                    if (end < 1)
-                        continue;
+                // Paralleles Lesen pro PLC (je PLC sequentiell in Batches)
+                await Parallel.ForEachAsync(plcNames, ct, async (plcName, token) =>
+                {
+                    token.ThrowIfCancellationRequested();
 
-                    while (index < end)
+                    if (!Plcs.TryGetValue(plcName, out var plc))
+                        return;
+
+                    try
                     {
-                        var batch = tags.Skip(index).Take(20).ToList();
-                        await Plcs[plcName].ReadMultipleVarsAsync(batch);
-
-                        foreach (var dataItem in batch)
+                        if (!plc.IsConnected)
                         {
-                            foreach (var tag in Tags)
-                            {
-                                if (tag.PlcName == plcName
-                                    && tag.Item.StartByteAdr == dataItem.StartByteAdr
-                                    && tag.Item.DataType == dataItem.DataType
-                                    && tag.Item.VarType == dataItem.VarType
-                                    )
-                                {
-                                    var diff = Convert.ToDouble(tag.Value) - Convert.ToDouble(dataItem.Value);
-                                    //Console.WriteLine($"Tag {tag.Name} gelesen: {dataItem.Value} (alt: {tag.Value}, diff: {diff})");
-                                    if (Math.Abs(diff)>0.09)
-                                        tag.Value = dataItem.Value;
-                                }
-                            }
+                            await plc.OpenAsync(token);
                         }
 
-                        index += 20;
-                    }
+                        // Nur Tags für diese PLC ermitteln
+                        var plcTags = new List<Tag>();
+                        foreach (var kv in Tags)
+                        {
+                            if (kv.Value.PlcName == plcName)
+                                plcTags.Add(kv.Value);
+                        }
 
-                    #endregion
-                }
+                        if (plcTags.Count == 0) return;
+
+                        // Mapping für schnelle Zuordnung
+                        var itemToTag = new Dictionary<string, Tag>(plcTags.Count);
+                        var items = new List<DataItem>(plcTags.Count);
+                        foreach (var t in plcTags)
+                        {
+                            var key = TagCollectionHelpers.DataItemKey(t.Item);
+                            itemToTag[key] = t;
+                            items.Add(t.Item);
+                        }
+
+                        int index = 0;
+                        int end = items.Count;
+                        const int batchSize = 20;
+
+                        while (index < end)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var take = Math.Min(batchSize, end - index);
+                            // slice ohne LINQ-Allokationen
+                            var batch = new List<DataItem>(take);
+                            for (int i = 0; i < take; i++)
+                                batch.Add(items[index + i]);
+
+                            await plc.ReadMultipleVarsAsync(batch, token);
+
+                            foreach (var dataItem in batch)
+                            {
+                                var key = TagCollectionHelpers.DataItemKey(dataItem);
+                                if (!itemToTag.TryGetValue(key, out var tag)) continue;
+
+                                if (!TagCollectionHelpers.TryConvertToDouble(tag.Value, out var oldVal))
+                                    oldVal = double.NaN;
+
+                                if (!TagCollectionHelpers.TryConvertToDouble(dataItem.Value, out var newVal))
+                                    continue;
+
+                                var diff = Math.Abs(oldVal - newVal);
+                                if (double.IsNaN(oldVal) || diff > 0.09)
+                                {
+                                    tag.Value = dataItem.Value;
+                                }
+                            }
+
+                            index += take;
+                        }
+                    }
+                    catch (PlcException plcEx)
+                    {
+                        Console.WriteLine("SPS-Fehler beim Lesen der Tags (PLC: " + plcName + "): " + plcEx.Message);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Durch Cancellation token erwartet
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Fehler beim Lesen der Tags (PLC: " + plcName + "): " + ex.Message);
+                    }
+                });
             }
             catch (PlcException plcEx)
             {
                 Console.WriteLine("SPS-Fehler beim Lesen der Tags: " + plcEx.Message);
             }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("Lesen aus SPS abgebrochen.");
+            }
             catch (Exception ex)
             {
                 Console.WriteLine("Fehler beim Lesen der Tags: " + ex.Message);
             }
-            #endregion
-
         }
+
+        #endregion
 
     }
 
+    /// <summary>
+    /// Datenpunkt
+    /// </summary>
     public class Tag
     {
-
         public Tag(string name)
         {
             Name = name;
-            PlcName = name[..3];
-            string address = name[4..].Replace('_', '.');
-            //Console.WriteLine($"Tag zu {PlcName} hinzugefügt: {address}");
-            Item = DataItem.FromAddress(address);
+            PlcName = name.Length >= 3 ? name[..3] : "A00";
+            string address = name.Length > 4 ? name[4..].Replace('_', '.') : string.Empty;
+            try
+            {
+                Item = DataItem.FromAddress(address);
+            }
+            catch
+            {
+                Item = DataItem.FromAddress(string.Empty);
+            }
             RefreshExpiration();
         }
 
         public string Name { get; set; }
         public string? Comment { get; set; }
-        internal string PlcName { get; private set; } = "A00";        
-        public DataItem Item { get; set; }      
+        internal string PlcName { get; private set; } = "A00";
+        internal DataItem Item { get; set; }
         public object? Value { get; set; }
 
-        private System.DateTime Expiration;
+        private System.DateTime Expiration; //MHD
 
         public void RefreshExpiration()
         {
-            Expiration = System.DateTime.Now.AddSeconds(90);
+            Expiration = System.DateTime.Now.AddSeconds(TagCollection.TagExpirationSeconds);
         }
 
-        public bool IsExpired()
+        public bool IsExpired(System.DateTime? now = null)
         {
-            return System.DateTime.Now > Expiration;
+            var check = now ?? System.DateTime.Now;
+            return check > Expiration;
         }
     }
 
     public record JsonTag(string N, object? V);
 
-    //[JsonSerializable(typeof(JsonTag))]
-    //internal partial class AppJsonSerializerContext(JsonSerializerOptions? options) : JsonSerializerContext(options)
-    //{
-       // protected override JsonSerializerOptions? GeneratedSerializerOptions => throw new NotImplementedException();
+    // Hilfsfunktionen für TagCollection
+    internal static partial class TagCollectionHelpers
+    {
+        internal static string DataItemKey(DataItem item) =>
+            $"{item.StartByteAdr}|{item.DataType}|{item.VarType}";
 
-        //public override JsonTypeInfo? GetTypeInfo(Type type)
-        //{
-        //    throw new NotImplementedException();
-        //}
-    //}
+        internal static bool TryConvertToDouble(object? value, out double result)
+        {
+            result = double.NaN;
+            if (value == null) return false;
+            if (value is double d) { result = d; return true; }
+            if (value is float f) { result = f; return true; }
+            if (value is int i) { result = i; return true; }
+            if (value is long l) { result = l; return true; }
+            if (value is decimal dec) { result = (double)dec; return true; }
+            if (double.TryParse(value.ToString(), out d)) { result = d; return true; }
+            return false;
+        }
+    }
+
 }
-
-//public record Todo(int Id, string? Title, DateOnly? DueBy = null, bool IsComplete = false);
-
-//[JsonSerializable(typeof(Todo[]))]
-//internal partial class AppJsonSerializerContext(JsonSerializerOptions? options) : JsonSerializerContext(options)
-//{
-//    public static IJsonTypeInfoResolver? Default { get; internal set; }
-
-//    protected override JsonSerializerOptions? GeneratedSerializerOptions => throw new NotImplementedException();
-
-//    public override JsonTypeInfo? GetTypeInfo(Type type)
-//    {
-//        throw new NotImplementedException();
-//    }
-//}
