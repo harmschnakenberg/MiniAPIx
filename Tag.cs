@@ -100,17 +100,39 @@ namespace MiniAPI
             _IsReadingTags = false;
         }
 
-        public static string PokeTagValues(string[] tagNames)
-        {           
-            var answer = new List<JsonTag>();
-
-            foreach (var tag in Tags.Where(x => tagNames.Contains(x.Name)))
+        public static List<JsonTag> PokeTagValues(ref Dictionary<string, object?> request)
+        {
+            List<JsonTag> jsonTags = [];
+        
+            foreach (var name in request.Keys)
             {
-                Console.WriteLine($"Tag {tag.Name}={tag.Value} wird gesendet.");
-                answer.Add(new JsonTag(tag.Name, tag.Value));
+                //Console.WriteLine($"Tag {name}");
+                double newVal = Convert.ToDouble(Tags.FirstOrDefault(x => x.Name == name)?.Value);              
+                double oldVal = Convert.ToDouble(request[name]);
+                double diff = Math.Abs(newVal - oldVal);
+                if (diff > 0.09)
+                {
+                    //Console.WriteLine($"Tag {name}: alt={oldVal}, neu={newVal}, diff={diff}");
+                    jsonTags.Add(new JsonTag(name, newVal));
+                }
+                request[name] = newVal;
+                
             }
+#if DEBUG
+            Console.WriteLine(string.Join(' ', jsonTags));
+#endif
+            return jsonTags;
+        }
 
-            return JsonSerializer.Serialize(answer);
+        public static JsonTag[] GetTagValues(Dictionary<string, object?> source)
+        {
+            List<JsonTag> tagAnswer = [];
+            foreach (var s in source)
+            {
+                if (s.Value != null)
+                    tagAnswer.Add(new JsonTag(s.Key, s.Value));
+            }
+            return [.. tagAnswer];
         }
 
         /// <summary>
@@ -121,7 +143,7 @@ namespace MiniAPI
         {
             for (int i = 0; i < 90; i++)
             {
-                Console.Write("; " + i);
+                // Console.Write("; " + i);
                 await ReadAllTagsOnceAsync();
                 await Task.Delay(1000);
             }
@@ -148,10 +170,9 @@ namespace MiniAPI
                     }
 
                     #region Prepare Tags for PLC
-                    List<DataItem> tags = Tags
+                    List<DataItem> tags = [.. Tags
                                             .Where(x => x.PlcName == plcName)
-                                            .Select(y => y.Item)
-                                            .ToList();
+                                            .Select(y => y.Item)];
                     #endregion
                     #region Read batches of 20
                     int index = 0;
@@ -209,9 +230,9 @@ namespace MiniAPI
         public Tag(string name)
         {
             Name = name;
-            PlcName = name.Substring(0, 3);
-            string address = name.Substring(4).Replace('_', '.');
-            Console.WriteLine($"Tag zu {PlcName} hinzugefügt: {address}");
+            PlcName = name[..3];
+            string address = name[4..].Replace('_', '.');
+            //Console.WriteLine($"Tag zu {PlcName} hinzugefügt: {address}");
             Item = DataItem.FromAddress(address);
             RefreshExpiration();
         }
@@ -237,9 +258,29 @@ namespace MiniAPI
 
     public record JsonTag(string N, object? V);
 
-    [JsonSerializable(typeof(JsonTag))]
-    internal partial class AppJsonSerializerContext : JsonSerializerContext
-    {
+    //[JsonSerializable(typeof(JsonTag))]
+    //internal partial class AppJsonSerializerContext(JsonSerializerOptions? options) : JsonSerializerContext(options)
+    //{
+       // protected override JsonSerializerOptions? GeneratedSerializerOptions => throw new NotImplementedException();
 
-    }
+        //public override JsonTypeInfo? GetTypeInfo(Type type)
+        //{
+        //    throw new NotImplementedException();
+        //}
+    //}
 }
+
+//public record Todo(int Id, string? Title, DateOnly? DueBy = null, bool IsComplete = false);
+
+//[JsonSerializable(typeof(Todo[]))]
+//internal partial class AppJsonSerializerContext(JsonSerializerOptions? options) : JsonSerializerContext(options)
+//{
+//    public static IJsonTypeInfoResolver? Default { get; internal set; }
+
+//    protected override JsonSerializerOptions? GeneratedSerializerOptions => throw new NotImplementedException();
+
+//    public override JsonTypeInfo? GetTypeInfo(Type type)
+//    {
+//        throw new NotImplementedException();
+//    }
+//}
