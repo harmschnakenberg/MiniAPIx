@@ -14,11 +14,13 @@ namespace MiniAPI
 
             // Hintergrundlese-Task starten (optional)
             TagCollection.StartReading();
-
+            
             try
             {
-                var builder = WebApplication.CreateSlimBuilder(args);
+                var builder = WebApplication.CreateSlimBuilder(args);                
                 var app = builder.Build();
+                app.UseStaticFiles();
+              
 
                 app.UseWebSockets();
 

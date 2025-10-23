@@ -9,7 +9,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="wwroot\**" />
+    <Content Remove="wwroot\**" />
+    <EmbeddedResource Remove="wwroot\**" />
+    <None Remove="wwroot\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="S7netplus" Version="0.20.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="wwwroot\js\script.js">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
