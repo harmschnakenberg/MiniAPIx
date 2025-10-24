@@ -23,7 +23,7 @@ namespace MiniAPI
               
 
                 app.UseWebSockets();
-
+                app.MapGet("/{name}", (string name) => "Hello {name}!");
                 app.Map("/", async context =>
                 {
                     if (!context.WebSockets.IsWebSocketRequest)
@@ -109,6 +109,7 @@ namespace MiniAPI
                     ctx.Response.StatusCode = 200;
                     ctx.Response.ContentType = "text/html";
                     await ctx.Response.WriteAsync(HtmlTemplate.JSWebsocket);
+                  
                     await ctx.Response.CompleteAsync();
                 });
 
@@ -136,7 +137,7 @@ namespace MiniAPI
 
             ms.Seek(0, SeekOrigin.Begin);
             using var reader = new StreamReader(ms, Encoding.UTF8);
-            return await reader.ReadToEndAsync();
+            return await reader.ReadToEndAsync(ct);
         }
     }
 }
