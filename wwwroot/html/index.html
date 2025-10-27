@@ -5,7 +5,7 @@
     <title>WebSocket Test</title>
     <link rel='shortcut icon' href='https://www.kreutztraeger-kaeltetechnik.de/wp-content/uploads/2016/12/favicon.ico'>
     <script src='/js/script.js'></script>
-    <link rel='stylesheet' href='https://www.w3schools.com/w3css/5/w3.css'>
+    <!--<link rel='stylesheet' href='https://www.w3schools.com/w3css/5/w3.css'>-->
     <link rel='stylesheet' href='/css/style.css'>
 </head>
 <body class='w3-container w3-asphalt'>
@@ -14,7 +14,7 @@
     <div class="sollwerte">
         <label>Stunde</label>
         <input data-name='A01_DB10_DBW2' data-unit='std' disabled>
-        <input value="0,0 °C">
+        <input type="number" min="0" max="23" data-unit='std' data-name='A01_DB10_DBW2'>
 
         <label>Minute</label>
         <input data-name='A01_DB10_DBW4' data-unit='min' disabled>

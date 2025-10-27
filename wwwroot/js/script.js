@@ -18,15 +18,15 @@ function initWebSocket() {
                 const tagName = myCollection[i].getAttribute('data-name');
                 tags.push(tagName);
             }
-        /*    if (myCollection[i].hasAttribute('data-unit')) {
-                const tagUnit = myCollection[i].getAttribute('data-unit');
-                const para = document.createElement("span");
-                const node = document.createTextNode(tagUnit);
-                para.appendChild(node);
+            //if (myCollection[i].hasAttribute('data-unit')) {
+            //    const tagUnit = myCollection[i].getAttribute('data-unit');
+            //    const para = document.createElement("span");
+            //    const node = document.createTextNode(tagUnit);
+            //    para.appendChild(node);
 
-                myCollection[i].parentNode.appendChild(para, myCollection[i]);
+            //    myCollection[i].parentNode.appendChild(para, myCollection[i]);
                
-             }//*/
+            // }
         }
         const message = JSON.stringify(tags);
         socket.send(message);

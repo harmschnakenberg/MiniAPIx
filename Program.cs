@@ -7,6 +7,7 @@ namespace MiniAPI
 {
     public class Program
     {
+       
         public static async Task Main(string[] args)
         {
             // TODO: lade CPUs aus Konfiguration
@@ -19,10 +20,9 @@ namespace MiniAPI
             {
                 var builder = WebApplication.CreateSlimBuilder(args);                
                 var app = builder.Build();
+                app.UseWebSockets();
                 app.UseStaticFiles();
               
-
-                app.UseWebSockets();
                 app.MapGet("/{name}", (string name) => "Hello {name}!");
                 app.Map("/", async context =>
                 {
@@ -42,7 +42,7 @@ namespace MiniAPI
 #if DEBUG
                         Console.WriteLine($"Neue Tags (raw): {initialJson}");
 #endif
-                        var tagNames = JsonSerializer.Deserialize<string[]?>(initialJson) ?? Array.Empty<string>();
+                        var tagNames = JsonSerializer.Deserialize<string[]?>(initialJson) ?? [];
                         if (tagNames.Length == 0)
                         {
                             await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Keine Tags ¸bermittelt", ct);
@@ -70,7 +70,7 @@ namespace MiniAPI
                                 var bytes = Encoding.UTF8.GetBytes(payload);
                                 await webSocket.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
 #if DEBUG
-                               // Console.WriteLine($"Sende: {payload}");
+                                Console.WriteLine($"Sende: {payload}");
 #endif
                             }
 
@@ -81,7 +81,7 @@ namespace MiniAPI
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
-                        // Client/Server schlieﬂt ó still exit
+                        Console.WriteLine("WebSocket Verbindung abgebrochen.");
                     }
                     catch (WebSocketException wsex)
                     {
@@ -97,9 +97,12 @@ namespace MiniAPI
                         {
                             try
                             {
+                                Console.WriteLine("Schlieﬂe WebSocket Verbindung.");
                                 await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
                             }
-                            catch { }
+                            catch { 
+                                Console.WriteLine("Fehler beim Schlieﬂen der WebSocket Verbindung.");
+                            }
                         }
                     }
                 });
@@ -108,8 +111,8 @@ namespace MiniAPI
                 {
                     ctx.Response.StatusCode = 200;
                     ctx.Response.ContentType = "text/html";
-                    await ctx.Response.WriteAsync(HtmlTemplate.JSWebsocket);
-                  
+                    var file = File.ReadAllText("wwwroot/html/index.html", Encoding.UTF8);
+                    await ctx.Response.WriteAsync(file);                  
                     await ctx.Response.CompleteAsync();
                 });
 

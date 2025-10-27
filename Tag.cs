@@ -18,14 +18,14 @@ namespace MiniAPI
     {
         private static bool _IsReadingTags;
        
-#if DEBUG
-        public const int TagExpirationSeconds = 30;
-#else
+//#if DEBUG
+//        public const int TagExpirationSeconds = 30;
+//#else
         public const int TagExpirationSeconds = 90;
-#endif
+//#endif
 
         #region SPS
-        private static readonly Dictionary<string, Plc> Plcs = new();
+        private static readonly Dictionary<string, Plc> Plcs = [];
 
 
         public static void AddCpu(string name, CpuType cpuType, string ip, short rack, short slot)
@@ -38,7 +38,7 @@ namespace MiniAPI
         // Threadsichere, schnelle Lookups nach Name
         public static ConcurrentDictionary<string, Tag> Tags { get; } = new();
 
-        private static readonly object _startStopLock = new();
+        private static readonly Lock _startStopLock = new();
         private static CancellationTokenSource? _readCts;
         private static Task? _readingTask;
 
@@ -123,9 +123,11 @@ namespace MiniAPI
                 }
 
                 var diff = Math.Abs(newVal - oldVal);
-                if (diff > 0.09)
+                var newJsonItem = new JsonTag(name, newVal);
+
+                if (diff > 0.09 && !jsonTags.Contains(newJsonItem)) 
                 {
-                    jsonTags.Add(new JsonTag(name, newVal));
+                    jsonTags.Add(newJsonItem);
                 }
                 request[name] = newVal;
             }
