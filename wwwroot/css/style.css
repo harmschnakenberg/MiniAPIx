@@ -1,12 +1,12 @@
 ﻿body {
 	background-color: rgb(60, 60, 60);
 	font-family: Arial, Helvetica, sans-serif;
-	padding: 0.5rem;
 }
 
-h1 {
-	color: white;
+h1{
+	color:white;
 	padding: 0.5rem;
+
 }
 /* Chrome, Safari, Edge, Opera */
 input::-webkit-outer-spin-button,
@@ -31,19 +31,15 @@ input:enabled {
 }
 
 .sollwerte {
-	max-width:50rem;
 	display: grid;
-	grid-template-columns: 30rem 8rem 2rem 8rem 2rem;
-	padding: 0.2rem;
-	gap: 0.2rem;
-	
+	grid-template-columns: 30% 5rem 2rem 5rem 2rem;
 }
 
 	.sollwerte label {
 		background-color: lightgrey;
 		color: black;
-		padding: 10px;
-		font-size: 1.2em;
+		font-size: 1em;
+		padding: 0rem 0.5rem;		
 	}
 
 	.sollwerte span {
@@ -51,8 +47,8 @@ input:enabled {
 	}
 
 	.sollwerte input {
-		font-size: 1.5em;
-		text-align: right;
+		font-size: 1.2em;
+		text-align: right;		
 		border: 1px solid grey;
 	}
 
