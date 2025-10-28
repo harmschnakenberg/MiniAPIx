@@ -39,13 +39,6 @@
         let yValues1 = [];
         let yValues2 = [];
         let yValues3 = [];
-        /*
-        for (let i = 0; i < 50; i++) {
-            xValues.push(i + 1);
-            yValues1.push(Math.floor(Math.random() * 90) + 1);
-            yValues2.push(Math.floor(Math.random() * 100) + 1);
-        }
-        //*/
 
         var lineChart = new Chart("myChart", {
             type: "line",
@@ -56,6 +49,7 @@
                     fill: false,
                     borderColor: 'red',
                     backgroundColor: '#991122',
+                    tension: 0,
                     data: yValues1
                 }, {
                     label: "A01_DB10_DBW4",
@@ -74,48 +68,42 @@
             options: {
                 legend: { display: 'bottom' },
                 scales: {
-                    yAxes: [{ ticks: { min: 0, max: 100 } }],
+                    yAxes: [{ ticks: { min: 0, max: 70 } }],
                 }
             }
         });
 
-       
+        function addData3(arr) {
 
-        //var newDataset = {
-        //    label: "A01_DB10_DBW6",
-        //    fill: false,
-        //    borderColor: 'red',
-        //    backgroundColor: '#33ff99',
-        //    data: 0
-        //}
+            let time = new Date();
+            time = time.toLocaleString();
+            lineChart.data.labels.push(time);
+            lineChart.data.datasets.forEach((dataset) => {
+                let pos = arr.findIndex(x => x.N == dataset.label);
+                if (pos >= 0)
+                    dataset.data.push(arr[pos].V);
+                else {
+                    //let oldVal = null;
+                    let oldVal = dataset.data.findLast(x => x != null);
+                    dataset.data.push(oldVal);
+                }
+            });
 
-       // addData(lineChart, 71, 99)
-
-        //function addData(chart, label, newData) {
-            
-        //    chart.data.labels.push(label);
-            
-        //    //.
-        //    chart.data.datasets[0].data.push(newData);
-        //    //chart.data.datasets.forEach((dataset) => {
-        //    //    dataset.data.push(newData);
-        //    //});
-        //    chart.update('none');
-        //}
-
+            lineChart.update('none');
+        }
 
         function addData2(time, tagname, value) {
             time = time.toLocaleString();
-            let pos = lineChart.data.datasets.findLastIndex(x => x.label == tagname);
+            let pos = lineChart.data.datasets.findIndex(x => x.label == tagname);
             const item = { x: time, y: value };
 
-            lineChart.data.labels.push(time.toLocaleString());            
+            lineChart.data.labels.push(time);
             lineChart.data.datasets[pos].data.push(item);
             lineChart.update('none');
         }
 
         function removeData(chart) {
-            chart.data.labels.pop();            
+            chart.data.labels.pop();
             chart.data.datasets.forEach((dataset) => {
                 dataset.data.pop();
             });

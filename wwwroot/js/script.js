@@ -1,4 +1,4 @@
-﻿setInterval('location.reload(true);', 90000); //Auto-Refresh
+﻿//setInterval('location.reload(true);', 90000); //Auto-Refresh
 let socket;
 function initWebSocket() {
     socket = new WebSocket('ws://' + window.location.host + '/');
@@ -37,6 +37,7 @@ function initWebSocket() {
     socket.onmessage = function (event) {
         console.log(event.data);
         let arr = JSON.parse(event.data);
+        addData3(arr);
         const myCollection = document.getElementsByTagName('input');
 
         for (let i = 0; i < myCollection.length; i++) {
@@ -45,8 +46,6 @@ function initWebSocket() {
                 let obj = arr.find(o => o.N === tagName);
                 if (obj) {
                     myCollection[i].value = obj.V;
-                    let lineChart = document.getElementById("myChart");
-                    addData2(new Date(), tagName, obj.V);
                 }
             }
         }
