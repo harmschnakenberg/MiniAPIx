@@ -1,5 +1,10 @@
-﻿body {
-	background-color: rgb(60, 60, 60);
+﻿:root {
+	--primary-bg-color: rgb(60, 60, 60);
+}
+
+body {
+	
+	background-color: var(--primary-bg-color);
 	font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -20,35 +25,51 @@ input[type=number] {
 	-moz-appearance: textfield;
 }
 
-input:disabled {
-	background-color: black;
-	color: white;
-}
 
-input:enabled {
-	background-color: white;
-	color: black;
-}
 
 .sollwerte {
 	display: grid;
-	grid-template-columns: 30% 5rem 2rem 5rem 2rem;
+	grid-template-columns: 30rem 7rem 3rem 7rem 3rem;	
 }
+
+	.sollwerte > * {
+		padding: 0.5rem;
+		margin: 1px 0px;
+		font-size: 1.2em;
+	}
+
+	.sollwerte div {
+		background-color: grey;
+	}
 
 	.sollwerte label {
 		background-color: lightgrey;
 		color: black;
-		font-size: 1em;
-		padding: 0rem 0.5rem;		
 	}
 
-	.sollwerte span {
-		background-color: lightgrey;
+	.sollwerte input + span {
+		background-color: white;
+		color: black;
+	}
+
+	.sollwerte input:disabled + span {
+		background-color: black;
+		color: white;		
+	}
+
+	.sollwerte input:disabled {
+		background-color: black;
+		color: white;
+	}
+
+	.sollwerte input:enabled {
+		background-color: white;
+		color: black;
 	}
 
 	.sollwerte input {
-		font-size: 1.2em;
-		text-align: right;		
-		border: 1px solid grey;
+		text-align: right;
+		border: 0px solid grey;
 	}
+
 

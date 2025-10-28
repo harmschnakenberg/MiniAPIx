@@ -47,7 +47,7 @@ namespace MiniAPI
             var tag = Tags.GetOrAdd(tagName, n => new Tag(n));
             tag.RefreshExpiration();
 #if DEBUG
-            Console.WriteLine($"Tag hinzugefügt/aktualisiert: {tagName}");
+            //Console.WriteLine($"Tag hinzugefügt/aktualisiert: {tagName}");
 #endif
         }
 
@@ -132,8 +132,8 @@ namespace MiniAPI
                 request[name] = newVal;
             }
 #if DEBUG
-            if(jsonTags.Count > 0)
-                Console.WriteLine(string.Join(' ', jsonTags.Select(j => $"{j.N}:{j.V}")));
+            //if(jsonTags.Count > 0)
+            //    Console.WriteLine(string.Join(' ', jsonTags.Select(j => $"{j.N}:{j.V}")));
 #endif
             return jsonTags;
         }

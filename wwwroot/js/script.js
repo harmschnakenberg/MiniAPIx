@@ -16,7 +16,9 @@ function initWebSocket() {
         for (let i = 0; i < myCollection.length; i++) {
             if (myCollection[i].hasAttribute('data-name')) {
                 const tagName = myCollection[i].getAttribute('data-name');
-                tags.push(tagName);
+                if (!tags.includes(tagName)) {
+                    tags.push(tagName);
+                }
             }
             if (myCollection[i].hasAttribute('data-unit')) {
                 const tagUnit = myCollection[i].getAttribute('data-unit');
@@ -24,7 +26,7 @@ function initWebSocket() {
                 const node = document.createTextNode(tagUnit);
                 para.appendChild(node);
 
-                myCollection[i].parentNode.appendChild(para, myCollection[i]);
+                myCollection[i].parentNode.insertBefore(para, myCollection[i].nextSibling);
                
              }
         }
@@ -35,7 +37,6 @@ function initWebSocket() {
     socket.onmessage = function (event) {
         console.log(event.data);
         let arr = JSON.parse(event.data);
-
         const myCollection = document.getElementsByTagName('input');
 
         for (let i = 0; i < myCollection.length; i++) {
@@ -43,8 +44,9 @@ function initWebSocket() {
                 const tagName = myCollection[i].getAttribute('data-name');
                 let obj = arr.find(o => o.N === tagName);
                 if (obj) {
-                    let unit = myCollection[i].getAttribute('data-unit');
-                    myCollection[i].value = obj.V + (unit ? ' ' + unit : '');
+                    myCollection[i].value = obj.V;
+                    let lineChart = document.getElementById("myChart");
+                    addData2(new Date(), tagName, obj.V);
                 }
             }
         }
@@ -65,13 +67,18 @@ function drawUnits() {
             const para = document.createElement("span");
             const node = document.createTextNode(tagUnit);
             para.appendChild(node);
-
-            myCollection[i].parentNode.appendChild(para, myCollection[i]);
-
+            
+            myCollection[i].parentNode.appendChild(para, myCollection[i]); 
         }
     }
-
 }
+
+function validateInput(inpObj) {
+    if (!inpObj.checkValidity()) {
+        alert(inpObj.validationMessage); 
+    }
+}
+
 
 window.onload = drawUnits;
 window.onload = initWebSocket;

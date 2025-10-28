@@ -3,10 +3,11 @@
 <head>
     <meta charset="utf-8" />
     <title>WebSocket Test</title>
-    <link rel='shortcut icon' href='https://www.kreutztraeger-kaeltetechnik.de/wp-content/uploads/2016/12/favicon.ico'>
+    <link rel='shortcut icon' href='/favicon.ico'>
     <script src='/js/script.js'></script>
     <!--<link rel='stylesheet' href='https://www.w3schools.com/w3css/5/w3.css'>-->
     <link rel='stylesheet' href='/css/style.css'>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
 </head>
 <body class='w3-container w3-asphalt'>
     <h1>WebSocket Test</h1>
@@ -21,15 +22,106 @@
         <input type="number" min="0" max="60" data-unit='min' data-name='A01_DB10_DBW4'>
 
         <label>Sekunde</label>
-        <input data-name='A01_DB10_DBW6' data-unit='sec' disabled>
+        <input data-name='A01_DB10_DBW6' data-unit='s' disabled>
         <input type="number" min="0" max="60" data-unit='sec' data-name='A01_DB10_DBW6'>
 
         <label>Raumtemperatur</label>
-        <input value="0,0 °C">
-        <span>x</span>
-        <input value="0,0 °C">
-        <span>y</span>
+        <div>&nbsp;</div>
+        <div>&nbsp;</div>
+        <input value="-10" type="number" min="-40" max="0" step="0.1" data-unit='°C'>
+
     </div>
 
+    <canvas id="myChart" style="margin:2rem;background-color:white;max-width:70vw"></canvas>
+
+    <script>
+        let xValues = [];
+        let yValues1 = [];
+        let yValues2 = [];
+        let yValues3 = [];
+        /*
+        for (let i = 0; i < 50; i++) {
+            xValues.push(i + 1);
+            yValues1.push(Math.floor(Math.random() * 90) + 1);
+            yValues2.push(Math.floor(Math.random() * 100) + 1);
+        }
+        //*/
+
+        var lineChart = new Chart("myChart", {
+            type: "line",
+            data: {
+                labels: xValues,
+                datasets: [{
+                    label: "A01_DB10_DBW6",
+                    fill: false,
+                    borderColor: 'red',
+                    backgroundColor: '#991122',
+                    data: yValues1
+                }, {
+                    label: "A01_DB10_DBW4",
+                    fill: false,
+                    borderColor: 'green',
+                    backgroundColor: '#119922',
+                    data: yValues2
+                }, {
+                    label: "A01_DB10_DBW2",
+                    fill: false,
+                    borderColor: 'blue',
+                    backgroundColor: '#112299',
+                    data: yValues3
+                }]
+            },
+            options: {
+                legend: { display: 'bottom' },
+                scales: {
+                    yAxes: [{ ticks: { min: 0, max: 100 } }],
+                }
+            }
+        });
+
+       
+
+        //var newDataset = {
+        //    label: "A01_DB10_DBW6",
+        //    fill: false,
+        //    borderColor: 'red',
+        //    backgroundColor: '#33ff99',
+        //    data: 0
+        //}
+
+       // addData(lineChart, 71, 99)
+
+        //function addData(chart, label, newData) {
+            
+        //    chart.data.labels.push(label);
+            
+        //    //.
+        //    chart.data.datasets[0].data.push(newData);
+        //    //chart.data.datasets.forEach((dataset) => {
+        //    //    dataset.data.push(newData);
+        //    //});
+        //    chart.update('none');
+        //}
+
+
+        function addData2(time, tagname, value) {
+            time = time.toLocaleString();
+            let pos = lineChart.data.datasets.findLastIndex(x => x.label == tagname);
+            const item = { x: time, y: value };
+
+            lineChart.data.labels.push(time.toLocaleString());            
+            lineChart.data.datasets[pos].data.push(item);
+            lineChart.update('none');
+        }
+
+        function removeData(chart) {
+            chart.data.labels.pop();            
+            chart.data.datasets.forEach((dataset) => {
+                dataset.data.pop();
+            });
+            chart.update('none'); //ohne Animation
+        }
+
+    </script>
 </body>
-</html>
+</html >

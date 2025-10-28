@@ -24,6 +24,7 @@ namespace MiniAPI
                 app.UseStaticFiles();
               
                 app.MapGet("/{name}", (string name) => "Hello {name}!");
+
                 app.Map("/", async context =>
                 {
                     if (!context.WebSockets.IsWebSocketRequest)
@@ -70,7 +71,7 @@ namespace MiniAPI
                                 var bytes = Encoding.UTF8.GetBytes(payload);
                                 await webSocket.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
 #if DEBUG
-                                Console.WriteLine($"Sende: {payload}");
+                               // Console.WriteLine($"Sende: {payload}");
 #endif
                             }
 
@@ -81,7 +82,7 @@ namespace MiniAPI
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
-                        Console.WriteLine("WebSocket Verbindung abgebrochen.");
+                        Console.WriteLine("WebSocket Verbindungsabbruch erbeten..");
                     }
                     catch (WebSocketException wsex)
                     {
@@ -97,7 +98,7 @@ namespace MiniAPI
                         {
                             try
                             {
-                                Console.WriteLine("Schließe WebSocket Verbindung.");
+                                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Schließe WebSocket Verbindung.");
                                 await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
                             }
                             catch { 
@@ -113,6 +114,17 @@ namespace MiniAPI
                     ctx.Response.ContentType = "text/html";
                     var file = File.ReadAllText("wwwroot/html/index.html", Encoding.UTF8);
                     await ctx.Response.WriteAsync(file);                  
+                    await ctx.Response.CompleteAsync();
+                });
+
+                app.MapGet("/tags", async ctx =>
+                {
+                    var allTags = TagCollection.Tags.Values
+                        .Select(t => new { t.Name, t.Value, t.Comment })
+                        .ToArray();
+                    ctx.Response.StatusCode = 200;
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.WriteAsJsonAsync(allTags);
                     await ctx.Response.CompleteAsync();
                 });
 
