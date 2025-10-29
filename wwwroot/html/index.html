@@ -4,12 +4,16 @@
     <meta charset="utf-8" />
     <title>WebSocket Test</title>
     <link rel='shortcut icon' href='/favicon.ico'>
-    <script src='/js/script.js'></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@^2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@^1"></script>
+
     <!--<link rel='stylesheet' href='https://www.w3schools.com/w3css/5/w3.css'>-->
     <link rel='stylesheet' href='/css/style.css'>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
+
 </head>
 <body class='w3-container w3-asphalt'>
+    <span id="loadtime"></span>
     <h1>WebSocket Test</h1>
 
     <div class="sollwerte">
@@ -32,84 +36,11 @@
 
     </div>
 
-    <canvas id="myChart" style="margin:2rem;background-color:white;max-width:70vw"></canvas>
+    <canvas id="myChart" style="background-color:white;max-width:50rem;height:40vh;max-height:50vh;"></canvas>
 
-    <script>
-        let xValues = [];
-        let yValues1 = [];
-        let yValues2 = [];
-        let yValues3 = [];
 
-        var lineChart = new Chart("myChart", {
-            type: "line",
-            data: {
-                labels: xValues,
-                datasets: [{
-                    label: "A01_DB10_DBW6",
-                    fill: false,
-                    borderColor: 'red',
-                    backgroundColor: '#991122',
-                    tension: 0,
-                    data: yValues1
-                }, {
-                    label: "A01_DB10_DBW4",
-                    fill: false,
-                    borderColor: 'green',
-                    backgroundColor: '#119922',
-                    data: yValues2
-                }, {
-                    label: "A01_DB10_DBW2",
-                    fill: false,
-                    borderColor: 'blue',
-                    backgroundColor: '#112299',
-                    data: yValues3
-                }]
-            },
-            options: {
-                legend: { display: 'bottom' },
-                scales: {
-                    yAxes: [{ ticks: { min: 0, max: 70 } }],
-                }
-            }
-        });
-
-        function addData3(arr) {
-
-            let time = new Date();
-            time = time.toLocaleString();
-            lineChart.data.labels.push(time);
-            lineChart.data.datasets.forEach((dataset) => {
-                let pos = arr.findIndex(x => x.N == dataset.label);
-                if (pos >= 0)
-                    dataset.data.push(arr[pos].V);
-                else {
-                    //let oldVal = null;
-                    let oldVal = dataset.data.findLast(x => x != null);
-                    dataset.data.push(oldVal);
-                }
-            });
-
-            lineChart.update('none');
-        }
-
-        function addData2(time, tagname, value) {
-            time = time.toLocaleString();
-            let pos = lineChart.data.datasets.findIndex(x => x.label == tagname);
-            const item = { x: time, y: value };
-
-            lineChart.data.labels.push(time);
-            lineChart.data.datasets[pos].data.push(item);
-            lineChart.update('none');
-        }
-
-        function removeData(chart) {
-            chart.data.labels.pop();
-            chart.data.datasets.forEach((dataset) => {
-                dataset.data.pop();
-            });
-            chart.update('none'); //ohne Animation
-        }
-
-    </script>
+    <script src='/js/chart.js'></script>
+    <script src='/js/script.js'></script>
+    <!--<script src='/js/charthelper.js'></script>-->
 </body>
 </html >

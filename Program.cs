@@ -1,7 +1,9 @@
+using Microsoft.Extensions.Options;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Channels;
 
 namespace MiniAPI
 {
@@ -11,9 +13,9 @@ namespace MiniAPI
         public static async Task Main(string[] args)
         {
             // TODO: lade CPUs aus Konfiguration
-            TagCollection.AddCpu("A01", S7.Net.CpuType.S71500, "192.168.160.56", 0, 0);
+            TagCollection.AddCpu("A01", S7.Net.CpuType.S71500, "10.0.11.60", 0, 0);
 
-            // Hintergrundlese-Task starten (optional)
+            // Hintergrundlese-Task starten
             TagCollection.StartReading();
             
             try
@@ -23,7 +25,7 @@ namespace MiniAPI
                 app.UseWebSockets();
                 app.UseStaticFiles();
               
-                app.MapGet("/{name}", (string name) => "Hello {name}!");
+                app.MapGet("/{name}", (string name) => $"Hello {name}!");
 
                 app.Map("/", async context =>
                 {
@@ -134,6 +136,9 @@ namespace MiniAPI
             {
                 Console.WriteLine($"Program Fehler: {ex.Message}");
             }
+
+            // Hintergrundlese-Task stoppen
+            TagCollection.StopReading();
         }
 
         private static async Task<string> ReadFullMessageAsync(WebSocket ws, CancellationToken ct)
@@ -153,6 +158,11 @@ namespace MiniAPI
             ms.Seek(0, SeekOrigin.Begin);
             using var reader = new StreamReader(ms, Encoding.UTF8);
             return await reader.ReadToEndAsync(ct);
+        }
+   
+        public static void Alert(string alert)
+        {
+            // TODO: implement alerting 
         }
     }
 }

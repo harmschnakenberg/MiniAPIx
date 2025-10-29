@@ -1,35 +1,22 @@
-﻿using Microsoft.AspNetCore.Mvc.Infrastructure;
-using S7.Net;
+﻿using S7.Net;
 using S7.Net.Types;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace MiniAPI
 {
     public static class TagCollection
     {
-        private static bool _IsReadingTags;
-       
-//#if DEBUG
-//        public const int TagExpirationSeconds = 30;
-//#else
+
+        private static bool _IsReadingTags;    
+        
         public const int TagExpirationSeconds = 90;
-//#endif
 
         #region SPS
         private static readonly Dictionary<string, Plc> Plcs = [];
 
-
         public static void AddCpu(string name, CpuType cpuType, string ip, short rack, short slot)
         {
+            Console.WriteLine($"neue SPS {cpuType} '{name}' an {ip}, Rack {rack}, Slot {slot}");
             Plcs[name] = new Plc(cpuType, ip, rack, slot);
         }
         #endregion
@@ -37,7 +24,6 @@ namespace MiniAPI
         #region Tag-CRUD
         // Threadsichere, schnelle Lookups nach Name
         public static ConcurrentDictionary<string, Tag> Tags { get; } = new();
-
         private static readonly Lock _startStopLock = new();
         private static CancellationTokenSource? _readCts;
         private static Task? _readingTask;
@@ -45,9 +31,9 @@ namespace MiniAPI
         public static void AddTag(string tagName)
         {
             var tag = Tags.GetOrAdd(tagName, n => new Tag(n));
-            tag.RefreshExpiration();
+            tag.Refresh();
 #if DEBUG
-            //Console.WriteLine($"Tag hinzugefügt/aktualisiert: {tagName}");
+            Console.WriteLine($"Tag hinzugefügt/aktualisiert: {tagName} {tag.TimeStamp}");
 #endif
         }
 
@@ -114,26 +100,22 @@ namespace MiniAPI
 
                 if (!TagCollectionHelpers.TryConvertToDouble(tag.Value, out var newVal))
                     continue;
+                                
+                var newJsonItem = new JsonTag(name, newVal, System.DateTime.Now);
 
-                if (!TagCollectionHelpers.TryConvertToDouble(request[name], out var oldVal))
-                {
-                    jsonTags.Add(new JsonTag(name, newVal));
-                    request[name] = newVal;
+                if (jsonTags.Contains(newJsonItem))
                     continue;
-                }
 
-                var diff = Math.Abs(newVal - oldVal);
-                var newJsonItem = new JsonTag(name, newVal);
-
-                if (diff > 0.09 && !jsonTags.Contains(newJsonItem)) 
+                if (!TagCollectionHelpers.TryConvertToDouble(request[name], out var oldVal) || Math.Abs(newVal - oldVal) > 0.09)                    
                 {
                     jsonTags.Add(newJsonItem);
+                    request[name] = newVal;                    
                 }
-                request[name] = newVal;
+
             }
 #if DEBUG
-            //if(jsonTags.Count > 0)
-            //    Console.WriteLine(string.Join(' ', jsonTags.Select(j => $"{j.N}:{j.V}")));
+            if(jsonTags.Count > 0)
+                Console.WriteLine(string.Join(' ', jsonTags.Select(j => $"{j.N}:{j.V}:{j.T}")));
 #endif
             return jsonTags;
         }
@@ -248,6 +230,7 @@ namespace MiniAPI
                                 if (double.IsNaN(oldVal) || diff > 0.09)
                                 {
                                     tag.Value = dataItem.Value;
+                                    
                                 }
                             }
 
@@ -304,30 +287,39 @@ namespace MiniAPI
             {
                 Item = DataItem.FromAddress(string.Empty);
             }
-            RefreshExpiration();
+
+            Refresh();            
         }
 
         public string Name { get; set; }
         public string? Comment { get; set; }
         internal string PlcName { get; private set; } = "A00";
         internal DataItem Item { get; set; }
-        public object? Value { get; set; }
 
-        private System.DateTime Expiration; //MHD
-
-        public void RefreshExpiration()
-        {
-            Expiration = System.DateTime.Now.AddSeconds(TagCollection.TagExpirationSeconds);
+        private object? _Value;
+        public object? Value { 
+            get { return _Value; } 
+            set { 
+                _Value = value;
+                //TimeStamp = System.DateTime.UtcNow;
+            } 
         }
 
+        public void Refresh()
+        {
+            TimeStamp = System.DateTime.UtcNow;
+        }
+
+        public System.DateTime TimeStamp { get; private set; }
+        
         public bool IsExpired(System.DateTime? now = null)
         {
             var check = now ?? System.DateTime.Now;
-            return check > Expiration;
+            return check > TimeStamp.AddSeconds(TagCollection.TagExpirationSeconds);
         }
     }
 
-    public record JsonTag(string N, object? V);
+    public record JsonTag(string N, object? V, System.DateTime T);
 
     // Hilfsfunktionen für TagCollection
     internal static partial class TagCollectionHelpers
