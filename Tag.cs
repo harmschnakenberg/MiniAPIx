@@ -244,6 +244,7 @@ namespace MiniAPI
                     catch (OperationCanceledException)
                     {
                         // Durch Cancellation token erwartet
+                        Console.WriteLine("Lesen aus SPS abgebrochen (PLC: " + plcName + ").");
                     }
                     catch (Exception ex)
                     {
