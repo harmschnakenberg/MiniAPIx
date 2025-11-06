@@ -1,9 +1,13 @@
-﻿using S7.Net;
+﻿using MiniAPI.Db;
+using S7.Net;
 using S7.Net.Types;
 using System.Collections.Concurrent;
+using System.Text;
+using System.Text.Json;
 
 namespace MiniAPI
 {
+
     public static class TagCollection
     {
 
@@ -17,8 +21,32 @@ namespace MiniAPI
         public static void AddCpu(string name, CpuType cpuType, string ip, short rack, short slot)
         {
             Console.WriteLine($"neue SPS {cpuType} '{name}' an {ip}, Rack {rack}, Slot {slot}");
-            Plcs[name] = new Plc(cpuType, ip, rack, slot);
+            
+            Plc plc = new(cpuType, ip, rack, slot);
+
+            if (plc.OpenAsync().Wait(5000))
+                Plcs[name] = plc;
+            else
+                Program.Message(Message.MessageType.Warning, $"Verbindung zur SPS {name} ({ip}) konnte nicht hergestellt werden.");
+
         }
+
+        public static string GetJsonCpus()
+        {
+            
+            return JsonSerializer.Serialize(Plcs);
+        }
+
+        public static void AddCpuConfig()
+        {
+            Dictionary<string, Plc> dbPlcs = Db.Sql.GetCpuConfig();
+            foreach (var plc in dbPlcs)
+            {
+                AddCpu(plc.Key, plc.Value.CPU, plc.Value.IP, plc.Value.Rack, plc.Value.Slot);
+            }
+        }
+
+
         #endregion
 
         #region Tag-CRUD
@@ -30,7 +58,7 @@ namespace MiniAPI
 
         public static void AddTag(string tagName)
         {
-            var tag = Tags.GetOrAdd(tagName, n => new Tag(n));
+            var tag = Tags.GetOrAdd(tagName, n => new Tag(n, false));
             tag.Refresh();
 #if DEBUG
             Console.WriteLine($"Tag hinzugefügt/aktualisiert: {tagName} {tag.TimeStamp}");
@@ -55,7 +83,9 @@ namespace MiniAPI
             foreach (var key in expired)
             {
                 if (Tags.TryRemove(key, out _))
+#if DEBUG
                     Console.WriteLine("entferne " + key);
+#endif
             }
         }
         #endregion
@@ -125,9 +155,11 @@ namespace MiniAPI
         /// </summary>
         private static async Task ReadLoopAsync(CancellationToken ct)
         {
+            Sql.CeckDailyDatabase();
+
             try
-            {
-                Console.WriteLine($"Tag-Lifetime: {TagExpirationSeconds} sec");
+            {               
+                    Console.WriteLine($"Tag-Lifetime: {TagExpirationSeconds} sec");
                 int seconds = 0;
                 // Verwende PeriodicTimer für stabilere Ticks und geringere Overhead
                 using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -140,13 +172,18 @@ namespace MiniAPI
                     {
                         RemoveExpiredTags();
                         seconds = 0;
+#if DEBUG
                         Console.WriteLine($"Es werden {Tags.Count} Tags überwacht.");
+#endif
                     }
                 }
+#if DEBUG
+                Console.WriteLine($"Ende ReadLoopAsync()");
+#endif
             }
             catch (OperationCanceledException) {
                 /* erwartet beim Stop */
-                Console.WriteLine($"Lesen aus SPS beenedet.");
+                Console.WriteLine($"Lesen aus SPS beendet.");
             }
             finally
             {
@@ -203,6 +240,7 @@ namespace MiniAPI
                         int index = 0;
                         int end = items.Count;
                         const int batchSize = 20;
+                        StringBuilder sb = new();
 
                         while (index < end)
                         {
@@ -230,16 +268,19 @@ namespace MiniAPI
                                 if (double.IsNaN(oldVal) || diff > 0.09)
                                 {
                                     tag.Value = dataItem.Value;
-                                    
+                                    sb.Append($"INSERT INTO Data (TagName, TagValue) VALUES ('{tag.Name}', {tag.Value}); ");
                                 }
                             }
 
                             index += take;
                         }
+                   
+                        Sql.SaveTags(sb.ToString());
+
                     }
                     catch (PlcException plcEx)
                     {
-                        Console.WriteLine("SPS-Fehler beim Lesen der Tags (PLC: " + plcName + "): " + plcEx.Message);
+                        Program.Message(Message.MessageType.Alert, "SPS-Fehler beim Lesen der Tags (PLC: " + plcName + "): " + plcEx.Message);
                     }
                     catch (OperationCanceledException)
                     {
@@ -275,7 +316,7 @@ namespace MiniAPI
     /// </summary>
     public class Tag
     {
-        public Tag(string name)
+        public Tag(string name, bool logFlag)
         {
             Name = name;
             PlcName = name.Length >= 3 ? name[..3] : "A00";
@@ -289,6 +330,7 @@ namespace MiniAPI
                 Item = DataItem.FromAddress(string.Empty);
             }
 
+            LogFlag = logFlag;
             Refresh();            
         }
 
@@ -306,9 +348,12 @@ namespace MiniAPI
             } 
         }
 
+        public bool LogFlag { get; set; } = false;
+
         public void Refresh()
         {
-            TimeStamp = System.DateTime.UtcNow;
+            if (!LogFlag)
+                TimeStamp = System.DateTime.UtcNow;
         }
 
         public System.DateTime TimeStamp { get; private set; }

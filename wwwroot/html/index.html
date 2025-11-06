@@ -16,6 +16,14 @@
     <span id="loadtime"></span>
     <h1>WebSocket Test</h1>
 
+    <div id="alerts">
+        <div class="alert">
+            <span onclick="this.parentElement.style.display='none'">&times;</span>
+            <h3>Danger!</h3>
+            <p>Red often indicates a dangerous or negative situation.</p>
+        </div>
+    </div>
+
     <div class="sollwerte">
         <label>Stunde</label>
         <input data-name='A01_DB10_DBW2' data-unit='std' disabled>
@@ -42,5 +50,31 @@
     <script src='/js/chart.js'></script>
     <script src='/js/script.js'></script>
     <!--<script src='/js/charthelper.js'></script>-->
+    <!--<script>
+        async function getText() {
+            let myObject = await fetch('/alert');
+            let myText = await myObject.text();
+            document.getElementById("alert").childNodes[5].innerHTML = myText;
+        }
+        getText();
+    </script>-->
+
+    <div>
+        <h2>Login</h2>
+
+        <form method="post" action='/login'>
+            <div>
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="Username" />
+            </div>
+            <div>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="Password" />
+            </div>
+            <input type="hidden" name="returnUrl" value="" disabled/>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+
 </body>
 </html >

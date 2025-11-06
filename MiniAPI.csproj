@@ -16,7 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="JWT" Version="11.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.10" />
     <PackageReference Include="S7netplus" Version="0.20.0" />
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
   </ItemGroup>
 
   <ItemGroup>

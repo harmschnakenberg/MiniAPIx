@@ -76,4 +76,48 @@ input[type=number] {
 		border: 0px solid grey;
 	}
 
+.alert {
+	position: relative;
+	background-color: lightcoral;
+	color: black;
+	opacity: 0.7;
+}
 
+	.alert h3 {
+		padding: 0.5rem;
+		font-weight: bold;
+	}
+
+	.alert p {
+		padding: 0.5rem;
+	}
+
+	.alert span {
+		position: absolute;
+		top: 1px;
+		right: 5px;
+		padding: 0.5rem;
+	}
+
+		.alert span:hover {
+			cursor: pointer;
+			background-color: white;
+		}
+
+.success {
+	background-color: lightgreen;
+	padding: 0.5rem;
+	font-weight: bold;
+}
+.info {
+	background-color: lightblue;
+	padding: 0.5rem;
+	font-weight: bold;
+}
+.warning {
+	background-color: lightyellow;
+	padding: 0.5rem;
+	font-weight: bold;
+}
+
+	

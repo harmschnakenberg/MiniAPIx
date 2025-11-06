@@ -1,44 +1,44 @@
-﻿namespace MiniAPI
-{
-    public static class HtmlTemplate
-    {
-        public static string JSWebsocket { get; } = @"<!DOCTYPE html>
-            <html>
-                <head>
-                    <title>WebSocket Test</title>
-                    <link rel='shortcut icon' href='https://www.kreutztraeger-kaeltetechnik.de/wp-content/uploads/2016/12/favicon.ico'>
-                    <script src='/js/script.js'></script>   
-                    <link rel='stylesheet' href='https://www.w3schools.com/w3css/5/w3.css'> 
-                    <link rel='stylesheet' href='css/style.css'>      
-                </head>
-                <body class='w3-container w3-asphalt'>
-                    <h1>WebSocket Test " + DateTime.Now + @"</h1>
-                    <div class='w3-panel w3-card w3-light-grey w3-flex' style='gap:8px'>
-                        <div class='w3-padding w3-teal'>
-                            <span class='w3-tag'>Done</span>
-                            <label>Stunde</label>
-                            <input class='ist w3-input' type='text' data-name='A01_DB10_DBW2' data-unit='std'>
-                        </div>
-                        <div class='w3-padding w3-red'>
-                            <label>Minute</label>
-                            <input class='ist w3-input' type='text' data-name='A01_DB10_DBW4' data-unit='min'>
-                        </div>
-                        <div class='w3-padding w3-green'>
-                            <label>Sekunde</label>
-                            <input class='ist w3-input' type='text' data-name='A01_DB10_DBW6' data-unit='sec'>
-                        </div>
-                    </div> 
+﻿//namespace MiniAPI
+//{
+//    public static class HtmlTemplate
+//    {
+//        public static string JSWebsocket { get; } = @"<!DOCTYPE html>
+//            <html>
+//                <head>
+//                    <title>WebSocket Test</title>
+//                    <link rel='shortcut icon' href='https://www.kreutztraeger-kaeltetechnik.de/wp-content/uploads/2016/12/favicon.ico'>
+//                    <script src='/js/script.js'></script>   
+//                    <link rel='stylesheet' href='https://www.w3schools.com/w3css/5/w3.css'> 
+//                    <link rel='stylesheet' href='css/style.css'>      
+//                </head>
+//                <body class='w3-container w3-asphalt'>
+//                    <h1>WebSocket Test " + DateTime.Now + @"</h1>
+//                    <div class='w3-panel w3-card w3-light-grey w3-flex' style='gap:8px'>
+//                        <div class='w3-padding w3-teal'>
+//                            <span class='w3-tag'>Done</span>
+//                            <label>Stunde</label>
+//                            <input class='ist w3-input' type='text' data-name='A01_DB10_DBW2' data-unit='std'>
+//                        </div>
+//                        <div class='w3-padding w3-red'>
+//                            <label>Minute</label>
+//                            <input class='ist w3-input' type='text' data-name='A01_DB10_DBW4' data-unit='min'>
+//                        </div>
+//                        <div class='w3-padding w3-green'>
+//                            <label>Sekunde</label>
+//                            <input class='ist w3-input' type='text' data-name='A01_DB10_DBW6' data-unit='sec'>
+//                        </div>
+//                    </div> 
                           
-                    <input type='text' id='a1' placeholder='Minute' data-name='A01_DB10_DBW2' data-unit='min'/>
-                    <input type='text' id='a2' placeholder='Minute' data-name='A01_DB10_DBW4' data-unit='min'/>
-                    <input type='text' id='a3' placeholder='Sekunde' data-name='A01_DB10_DBW6' data-unit='s'/>
-                    <input type='text' id='a4' placeholder='Wochentag' data-name='A01_DB10_DBW8'/>
-                    <button onclick='sendMessage()'>Send Message</button>
-                </body>
-            </html>
-        ";
-    }
-}
+//                    <input type='text' id='a1' placeholder='Minute' data-name='A01_DB10_DBW2' data-unit='min'/>
+//                    <input type='text' id='a2' placeholder='Minute' data-name='A01_DB10_DBW4' data-unit='min'/>
+//                    <input type='text' id='a3' placeholder='Sekunde' data-name='A01_DB10_DBW6' data-unit='s'/>
+//                    <input type='text' id='a4' placeholder='Wochentag' data-name='A01_DB10_DBW8'/>
+//                    <button onclick='sendMessage()'>Send Message</button>
+//                </body>
+//            </html>
+//        ";
+//    }
+//}
 
 /* FUNKTIONAL!
 

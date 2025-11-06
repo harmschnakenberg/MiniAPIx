@@ -1,142 +1,39 @@
 using Microsoft.Extensions.Options;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
+using static MiniAPI.Program;
 
 namespace MiniAPI
 {
-    public class Program
+    public partial class Program
     {
-       
-        public static async Task Main(string[] args)
+       internal static bool running = true;
+
+        public static async Task Main()
         {
-            // TODO: lade CPUs aus Konfiguration
-            TagCollection.AddCpu("A01", S7.Net.CpuType.S71500, "10.0.11.60", 0, 0);
+            
+            TagCollection.AddCpu("A02", S7.Net.CpuType.S71500, "10.0.11.60", 0, 0);
+            //TagCollection.AddCpu("A01", S7.Net.CpuType.S71500, "192.168.160.56", 0, 0);
+
+            //lade CPUs aus Konfiguration
+            TagCollection.AddCpuConfig();
 
             // Hintergrundlese-Task starten
             TagCollection.StartReading();
-            
-            try
-            {
-                var builder = WebApplication.CreateSlimBuilder(args);                
-                var app = builder.Build();
-                app.UseWebSockets();
-                app.UseStaticFiles();
-              
-                app.MapGet("/{name}", (string name) => $"Hello {name}!");
 
-                app.Map("/", async context =>
-                {
-                    if (!context.WebSockets.IsWebSocketRequest)
-                    {
-                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                        return;
-                    }
+            do {
+            await WebAppMain();
+              await Task.Delay(1000);
+            } while (running);
 
-                    using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-                    var ct = context.RequestAborted;
-
-                    try
-                    {
-                        // 1) Vollständige initiale Nachricht einlesen (kann fragmentiert kommen)
-                        var initialJson = await ReadFullMessageAsync(webSocket, ct);
+      
 #if DEBUG
-                        Console.WriteLine($"Neue Tags (raw): {initialJson}");
+            Console.WriteLine("WebApplication ist geschlossen.");
 #endif
-                        var tagNames = JsonSerializer.Deserialize<string[]?>(initialJson) ?? [];
-                        if (tagNames.Length == 0)
-                        {
-                            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Keine Tags übermittelt", ct);
-                            return;
-                        }
-
-                        // 2) Lokale Anfragemap aufbauen (per connection)
-                        var requested = tagNames
-                            .Where(n => !string.IsNullOrWhiteSpace(n))
-                            .Distinct()
-                            .ToDictionary(n => n, _ => (object?)null);
-
-                        // 3) Tags global registrieren
-                        TagCollection.AddTags(tagNames);
-
-                        // 4) Schleife: nur geänderte Werte senden
-                        var options = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
-
-                        while (!ct.IsCancellationRequested && webSocket.State == WebSocketState.Open)
-                        {
-                            var changed = TagCollection.PokeTagValues(ref requested);
-                            if (changed.Count > 0)
-                            {
-                                var payload = JsonSerializer.Serialize(changed.ToArray(), options);
-                                var bytes = Encoding.UTF8.GetBytes(payload);
-                                await webSocket.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
-#if DEBUG
-                               // Console.WriteLine($"Sende: {payload}");
-#endif
-                            }
-
-                            // moderate Poll-Rate; Abbruch über ct möglich
-                            await Task.Delay(1000, ct);
-                        }
-
-                    }
-                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                    {
-                        Console.WriteLine("WebSocket Verbindungsabbruch erbeten..");
-                    }
-                    catch (WebSocketException wsex)
-                    {
-                        Console.WriteLine($"WebSocket Fehler: {wsex.Message}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Fehler in WebSocket-Handler: {ex.Message}");
-                    }
-                    finally
-                    {
-                        if (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived)
-                        {
-                            try
-                            {
-                                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Schließe WebSocket Verbindung.");
-                                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
-                            }
-                            catch { 
-                                Console.WriteLine("Fehler beim Schließen der WebSocket Verbindung.");
-                            }
-                        }
-                    }
-                });
-
-                app.Map("/test", async ctx =>
-                {
-                    ctx.Response.StatusCode = 200;
-                    ctx.Response.ContentType = "text/html";
-                    var file = File.ReadAllText("wwwroot/html/index.html", Encoding.UTF8);
-                    await ctx.Response.WriteAsync(file);                  
-                    await ctx.Response.CompleteAsync();
-                });
-
-                app.MapGet("/tags", async ctx =>
-                {
-                    var allTags = TagCollection.Tags.Values
-                        .Select(t => new { t.Name, t.Value, t.Comment })
-                        .ToArray();
-                    ctx.Response.StatusCode = 200;
-                    ctx.Response.ContentType = "application/json";
-                    await ctx.Response.WriteAsJsonAsync(allTags);
-                    await ctx.Response.CompleteAsync();
-                });
-
-                await app.RunAsync();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Program Fehler: {ex.Message}");
-            }
-
             // Hintergrundlese-Task stoppen
             TagCollection.StopReading();
         }
@@ -160,9 +57,37 @@ namespace MiniAPI
             return await reader.ReadToEndAsync(ct);
         }
    
-        public static void Alert(string alert)
+
+
+
+        public static void Message(Message.MessageType type, string alert)
         {
+#if DEBUG
+            Console.WriteLine($"[{nameof(type)}] {alert}");
+#endif
             // TODO: implement alerting 
+            Alerts.Add(new Message(type,alert));
         }
+
+
+    }
+
+
+    public class Message(Message.MessageType type, string message)
+    {
+        public enum MessageType
+        {
+            Alert,
+            Warning,
+            Success,
+            Info
+        }
+
+        [JsonPropertyName("type")]
+        public MessageType Type { get; set; } = type;
+        [JsonPropertyName("message")]
+        public string Text { get; set; } = message;
+        [JsonPropertyName("timestamp")]
+        public DateTime Timestamp { get; set; } = DateTime.Now;
     }
 }
